@@ -11,6 +11,11 @@ const sanitizeFilename = require("sanitize-filename");
 const dayjs = require("dayjs");
 const utimes = require("utimes");
 
+if (!process.env.COOKIE) {
+  console.error("Missing COOKIE environment variable");
+  process.exit(1);
+}
+
 const metadata = {};
 
 const sul = axios.create({
@@ -30,6 +35,10 @@ async function fetchPage(n) {
   const $ = cheerio.load(data);
 
   const links = $("div.row.tr[data-file-id]");
+  if (!links.length) {
+    console.error(`No links found on page ${n}`);
+    console.log(data);
+  }
 
   for (const link of links) {
     const $link = $(link);
