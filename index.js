@@ -9,6 +9,7 @@ const pipeline = util.promisify(stream.pipeline);
 const { default: PQueue } = require("p-queue");
 const sanitizeFilename = require("sanitize-filename");
 const dayjs = require("dayjs");
+const utimes = require("utimes");
 
 const metadata = {};
 
@@ -52,10 +53,11 @@ async function fetchPage(n) {
     };
 
     // Add the download to the queue
-    const dateDir = path.join("images", dayjs(date).format("YYYY-MM"));
+    const dateObj = dayjs(date);
+    const dateDir = path.join("images", dateObj.format("YYYY-MM"));
     await fs.mkdirp(dateDir);
     const destination = path.join(dateDir, sanitizeFilename(name) || id);
-    queue.add(() => downloadFile(url, destination));
+    queue.add(() => downloadFile(url, destination, dateObj.valueOf()));
   }
 
   // Flush the metadata at the end of each page
@@ -71,10 +73,11 @@ async function fetchPage(n) {
   }
 }
 
-async function downloadFile(url, destination) {
+async function downloadFile(url, destination, time) {
   try {
     const res = await sul.get(url, { responseType: "stream" });
     await pipeline(res.data, fs.createWriteStream(destination));
+    if (time) await utimes.utimes(destination, time);
     console.log(`Downloaded ${url} to ${destination}`);
   } catch (err) {
     console.error(`Failed to download ${url} to ${destination}`, err);

@@ -23,7 +23,22 @@ COOKIE="your s-ul.eu cookie" CONCURRENCY=8 node .
 - The `CONCURRENCY` environment variable is optional, and defaults to 8.
 
 Files will be downloaded to the `images` directory, with sub-directories for each year and month (e.g. 
-`images/2023-01`).
+`images/2023-01`). The files' modification date will be set to the time the file was originally uploaded to s-ul.
+
+An `images/index.json` file will also be created, containing a map of numeric file IDs to objects like follows:
+
+```json
+{
+  "55230": {
+    "id": "55230",
+    "url": "https://lemmmy.s-ul.eu/pdqiLns4",
+    "name": "Untitled-1_@_3200%_(RGB16)__2015-08-18_02-50-34.png",
+    "title": "2015-08-18 01:50:34<br />Hits: 3",
+    "date": "2015-08-18 01:50:34",
+    "size": "97.04 KB"
+  }
+}
+```
 
 ## License
 

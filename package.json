@@ -10,6 +10,7 @@
     "dotenv": "^16.0.3",
     "fs-extra": "^11.1.0",
     "p-queue": "^6",
-    "sanitize-filename": "^1.6.3"
+    "sanitize-filename": "^1.6.3",
+    "utimes": "^5.1.1"
   }
 }
