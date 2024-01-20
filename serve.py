@@ -3,7 +3,7 @@ import sys
 
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Optional, Any
-from flask import Flask, send_file
+from flask import Flask, Blueprint, send_file, jsonify
 from pathlib import Path
 from urllib.parse import urlparse
 from datetime import date, datetime
@@ -23,12 +23,37 @@ class IndexEntry:
 
 
 app = Flask(__name__)
+archive_bp = Blueprint("archive", __name__)
 
 image_index: Optional[Dict[str, IndexEntry]] = None
 images_path: Optional[Path] = None
 
 
-@app.route("/<string:path>")
+@archive_bp.route("/years")
+def list_archived_years():
+  assert image_index is not None
+  years = {entry.date.year for entry in image_index.values()}
+  return jsonify(list(years))
+
+
+@archive_bp.route("/years/<int:year>/months")
+def list_archived_months_for_year(year: int):
+  assert image_index is not None
+  months = {entry.date.month for entry in image_index.values()
+                             if  entry.date.year == year}
+  return jsonify(list(months))
+
+
+@archive_bp.route("/years/<int:year>/months/<int:month>")
+def list_archived_paths_for_year_and_month(year: int, month: int):
+  assert image_index is not None
+  paths = [entry.path for entry in image_index.values()
+                      if  entry.date.year == year
+                      and entry.date.month == month]
+  return jsonify(paths)
+
+
+@archive_bp.route("/<string:path>")
 def view_screenshot(path: str):
   assert image_index is not None
   assert images_path is not None
@@ -80,9 +105,11 @@ def parse_index(index_path: Path) -> Optional[Dict[str, IndexEntry]]:
   return output_index
 
 
-def parse_arguments(args: List[str]) -> Tuple[Path, Path]:
-  if len(args) < 2:
-    app.logger.error(f"Usage: {args[0]} [images directory]")
+def parse_arguments(args: List[str]) -> Tuple[Path, Path, str]:
+  n = len(args)
+
+  if n < 2:
+    app.logger.error(f"Usage: {args[0]} IMAGES_DIR [ROUTE_PREFIX]")
     exit(1)
   
   try:
@@ -100,11 +127,19 @@ def parse_arguments(args: List[str]) -> Tuple[Path, Path]:
     app.logger.error(f"Directory '{images_path}' does not contain an index.json file!")
     exit(1)
     
-  return images_path, index_path
+  if n > 2:
+    route_prefix = args[2]
+    
+    if not route_prefix.startswith("/"):
+      route_prefix = f"/{route_prefix}"
+  else:
+    route_prefix = "/"
+    
+  return images_path, index_path, route_prefix
 
 
 if __name__ == "__main__":
-  images_path, index_path = parse_arguments(sys.argv)
+  images_path, index_path, route_prefix = parse_arguments(sys.argv)
   image_index = parse_index(index_path)
   
   if image_index is None:
@@ -112,4 +147,6 @@ if __name__ == "__main__":
     exit(1)
     
   app.logger.info("Successfully parsed index.json")
+  
+  app.register_blueprint(archive_bp, url_prefix=route_prefix)
   app.run()
