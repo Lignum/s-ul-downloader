@@ -1,4 +1,6 @@
 node_modules
+virtualenv
 .env
 images
 yarn-error.log
+__pycache__
