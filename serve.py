@@ -140,7 +140,8 @@ def http_error(error: HTTPException):
   return response, error.code
 
 
+app.logger.addHandler(logging.StreamHandler())
+app.register_blueprint(archive_bp, url_prefix=ROUTE_PREFIX)
+
 if __name__ == "__main__":
-  app.logger.addHandler(logging.StreamHandler())
-  app.register_blueprint(archive_bp, url_prefix=ROUTE_PREFIX)
   app.run()
