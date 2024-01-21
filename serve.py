@@ -1,12 +1,19 @@
 import json
 import sys
+import logging
+import traceback
 
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Optional, Any
-from flask import Flask, Blueprint, send_file, jsonify
+from flask import Flask, Blueprint, send_file, jsonify, abort
+from werkzeug.exceptions import HTTPException, InternalServerError
 from pathlib import Path
 from urllib.parse import urlparse
 from datetime import date, datetime
+
+ROUTE_PREFIX = "/archive"
+IMAGES_PATH = Path("images")
+INDEX_PATH = IMAGES_PATH.joinpath("index.json")
 
 
 @dataclass
@@ -26,19 +33,30 @@ app = Flask(__name__)
 archive_bp = Blueprint("archive", __name__)
 
 image_index: Optional[Dict[str, IndexEntry]] = None
-images_path: Optional[Path] = None
+
+@app.route("/favicon.ico")
+def favicon():
+  return "404 No favicon", 404
 
 
 @archive_bp.route("/years")
 def list_archived_years():
-  assert image_index is not None
+  global image_index
+  
+  if image_index is None:
+    image_index = parse_index(INDEX_PATH)
+  
   years = {entry.date.year for entry in image_index.values()}
   return jsonify(list(years))
 
 
 @archive_bp.route("/years/<int:year>/months")
 def list_archived_months_for_year(year: int):
-  assert image_index is not None
+  global image_index
+  
+  if image_index is None:
+    image_index = parse_index(INDEX_PATH)
+
   months = {entry.date.month for entry in image_index.values()
                              if  entry.date.year == year}
   return jsonify(list(months))
@@ -46,7 +64,11 @@ def list_archived_months_for_year(year: int):
 
 @archive_bp.route("/years/<int:year>/months/<int:month>")
 def list_archived_paths_for_year_and_month(year: int, month: int):
-  assert image_index is not None
+  global image_index
+  
+  if image_index is None:
+    image_index = parse_index(INDEX_PATH)
+
   paths = [entry.path for entry in image_index.values()
                       if  entry.date.year == year
                       and entry.date.month == month]
@@ -55,11 +77,13 @@ def list_archived_paths_for_year_and_month(year: int, month: int):
 
 @archive_bp.route("/<string:path>")
 def view_screenshot(path: str):
-  assert image_index is not None
-  assert images_path is not None
+  global image_index
+  
+  if image_index is None:
+    image_index = parse_index(INDEX_PATH)
   
   entry = image_index[path]
-  file_path = entry.file_path(images_path)
+  file_path = entry.file_path(IMAGES_PATH)
   return send_file(file_path)
 
 
@@ -105,48 +129,18 @@ def parse_index(index_path: Path) -> Optional[Dict[str, IndexEntry]]:
   return output_index
 
 
-def parse_arguments(args: List[str]) -> Tuple[Path, Path, str]:
-  n = len(args)
+@app.errorhandler(HTTPException)
+def http_error(error: HTTPException):
+  response = f"{error.code} {error.description}"
 
-  if n < 2:
-    app.logger.error(f"Usage: {args[0]} IMAGES_DIR [ROUTE_PREFIX]")
-    exit(1)
-  
-  try:
-    images_path = Path(args[1])
-  except:
-    app.logger.error("Specified path to images directory is invalid!")
-    exit(1)
-  
-  if not images_path.is_dir():
-    app.logger.error(f"Specified path does not point to a directory!")
-    exit(1)
-  
-  index_path = images_path.joinpath("index.json")
-  if not index_path.is_file():
-    app.logger.error(f"Directory '{images_path}' does not contain an index.json file!")
-    exit(1)
+  if isinstance(error, InternalServerError):
+    response += f"\n{error.original_exception}\n"
+    response += traceback.format_exc()
     
-  if n > 2:
-    route_prefix = args[2]
-    
-    if not route_prefix.startswith("/"):
-      route_prefix = f"/{route_prefix}"
-  else:
-    route_prefix = "/"
-    
-  return images_path, index_path, route_prefix
+  return response, error.code
 
 
 if __name__ == "__main__":
-  images_path, index_path, route_prefix = parse_arguments(sys.argv)
-  image_index = parse_index(index_path)
-  
-  if image_index is None:
-    app.logger.error("Failed to parse index.json")
-    exit(1)
-    
-  app.logger.info("Successfully parsed index.json")
-  
-  app.register_blueprint(archive_bp, url_prefix=route_prefix)
+  app.logger.addHandler(logging.StreamHandler())
+  app.register_blueprint(archive_bp, url_prefix=ROUTE_PREFIX)
   app.run()
